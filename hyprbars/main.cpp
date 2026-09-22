@@ -67,7 +67,8 @@ static void onUpdateWindowRules(PHLWINDOW window) {
 
 int newLuaButton(lua_State* L) {
     if (!lua_istable(L, 1))
-        return Config::Lua::Bindings::Internal::configError(L, "add_button: expected a table { bg_color, fg_color, size, icon, action }");
+        return Config::Lua::Bindings::Internal::configError(
+            L, "add_button: expected a table { bg_color, fg_color, size, icon, action, [side], [active_when], [active_bg_color] }");
 
     SHyprButton button;
 
@@ -95,7 +96,7 @@ int newLuaButton(lua_State* L) {
             return Config::Lua::Bindings::Internal::configError(L, "add_button: failed to parse fg_color");
 
         button.userfg = true;
-        button.fgcol = parser.parsed();
+        button.fgcol  = parser.parsed();
     }
 
     {
@@ -130,6 +131,56 @@ int newLuaButton(lua_State* L) {
 
         button.cmd = lua_tostring(L, -1);
     }
+
+    // ---- dragonkun patch: optional per-button side and active state ----------
+
+    {
+        Hyprutils::Utils::CScopeGuard x([L] { lua_pop(L, 1); });
+
+        lua_getfield(L, 1, "side");
+
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isstring(L, -1))
+                return Config::Lua::Bindings::Internal::configError(L, "add_button: side must be \"left\" or \"right\"");
+
+            button.side = lua_tostring(L, -1);
+            if (button.side != "left" && button.side != "right")
+                return Config::Lua::Bindings::Internal::configError(L, "add_button: side must be \"left\" or \"right\"");
+        }
+    }
+
+    {
+        Hyprutils::Utils::CScopeGuard x([L] { lua_pop(L, 1); });
+
+        lua_getfield(L, 1, "active_when");
+
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isstring(L, -1))
+                return Config::Lua::Bindings::Internal::configError(L, "add_button: active_when must be \"pinned\", \"floating\" or \"no_screen_share\"");
+
+            button.activeWhen = lua_tostring(L, -1);
+            if (button.activeWhen != "pinned" && button.activeWhen != "floating" && button.activeWhen != "no_screen_share")
+                return Config::Lua::Bindings::Internal::configError(L, "add_button: active_when must be \"pinned\", \"floating\" or \"no_screen_share\"");
+        }
+    }
+
+    {
+        Hyprutils::Utils::CScopeGuard x([L] { lua_pop(L, 1); });
+
+        lua_getfield(L, 1, "active_bg_color");
+
+        if (!lua_isnil(L, -1)) {
+            Config::Lua::CLuaConfigColor parser(0);
+            auto                         err = parser.parse(L);
+            if (err.errorCode != Config::Lua::PARSE_ERROR_OK)
+                return Config::Lua::Bindings::Internal::configError(L, "add_button: failed to parse active_bg_color");
+
+            button.activeBgcol = parser.parsed();
+            button.hasActiveBg = true;
+        }
+    }
+
+    // --------------------------------------------------------------------------
 
     g_pGlobalState->buttons.push_back(std::move(button));
 
