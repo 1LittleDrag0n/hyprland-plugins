@@ -66,7 +66,6 @@ class CHyprBar : public IHyprWindowDecoration {
     bool                       m_hidden             = false;
     bool                       m_bTitleColorChanged = false;
     bool                       m_bButtonHovered     = false;
-    bool                       m_bBarHovered        = false;
     bool                       m_bLastEnabledState  = false;
     bool                       m_bWindowHasFocus    = false;
     std::optional<CHyprColor>  m_bForcedBarColor;
@@ -106,7 +105,6 @@ class CHyprBar : public IHyprWindowDecoration {
     CHyprSignalListener m_pMouseMoveCallback;
 
     std::string         m_szLastTitle;
-    int                 m_iLastScaledTextSize = 0;
 
     bool                m_bDraggingThis  = false;
     bool                m_bTouchEv       = false;

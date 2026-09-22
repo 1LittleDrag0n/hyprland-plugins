@@ -59,7 +59,7 @@ static void onFocusChange(PHLWINDOW window, Desktop::eFocusReason reason) {
     if (!configValues.enable->value())
         return;
 
-    if (!configValues.animateFloating->value() && window->isFloating())
+    if (!configValues.animateFloating->value() && window->m_isFloating)
         return;
 
     static PHLWINDOWREF lastWindow;
@@ -83,71 +83,61 @@ static void onFocusChange(PHLWINDOW window, Desktop::eFocusReason reason) {
     const auto POUT = Config::animationTree()->getAnimationPropertyConfig("hyprfocusOut");
 
     if (mode == "flash") {
-        const auto ORIGINAL = window->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->goal();
-        window->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->setConfig(PIN);
-        *window->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE] = configValues.fadeOpacity->value();
+        const auto ORIGINAL = window->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->goal();
+        window->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setConfig(PIN);
+        *window->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE) = configValues.fadeOpacity->value();
 
-        window->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->setCallbackOnEnd([w = PHLWINDOWREF{window}, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
+        window->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setCallbackOnEnd([w = PHLWINDOWREF{window}, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
             if (!w)
                 return;
-            w->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->setConfig(POUT);
-            *w->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE] = ORIGINAL;
+            w->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setConfig(POUT);
+            *w->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE) = ORIGINAL;
 
-            w->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->setCallbackOnEnd(nullptr);
+            w->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setCallbackOnEnd(nullptr);
         });
     } else if (mode == "shrink") {
-        g_pEventLoopManager->doLater([w = PHLWINDOWREF{window}, PIN, POUT, PERCENT = configValues.shrinkPercentage->value()] {
+        const auto ORIGINAL = CBox{window->positionAnimation()->goal(), window->sizeAnimation()->goal()};
+
+        window->positionAnimation()->setConfig(PIN);
+        window->sizeAnimation()->setConfig(PIN);
+
+        auto box = ORIGINAL.copy().scaleFromCenter(configValues.shrinkPercentage->value());
+
+        *window->positionAnimation() = box.pos();
+        *window->sizeAnimation()     = box.size();
+
+        window->sizeAnimation()->setCallbackOnEnd([w = PHLWINDOWREF{window}, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
             if (!w)
                 return;
+            w->sizeAnimation()->setConfig(POUT);
+            w->positionAnimation()->setConfig(POUT);
 
-            const auto ORIGINAL = CBox{w->positionAnimation()->goal(), w->sizeAnimation()->goal()};
+            if (w->m_isFloating || Fullscreen::controller()->isFullscreen(w.lock())) {
+                *w->positionAnimation() = ORIGINAL.pos();
+                *w->sizeAnimation()     = ORIGINAL.size();
+            } else
+                w->layoutTarget()->recalc();
 
-            w->positionAnimation()->setConfig(PIN);
-            w->sizeAnimation()->setConfig(PIN);
-
-            auto box = ORIGINAL.copy().scaleFromCenter(PERCENT);
-
-            *w->positionAnimation() = box.pos();
-            *w->sizeAnimation()     = box.size();
-
-            w->sizeAnimation()->setCallbackOnEnd([w, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
-                if (!w)
-                    return;
-                w->sizeAnimation()->setConfig(POUT);
-                w->positionAnimation()->setConfig(POUT);
-
-                if (w->isFloating() || Fullscreen::controller()->isFullscreen(w.lock())) {
-                    *w->positionAnimation() = ORIGINAL.pos();
-                    *w->sizeAnimation()     = ORIGINAL.size();
-                } else
-                    w->layoutTarget()->recalc();
-
-                w->sizeAnimation()->setCallbackOnEnd(nullptr);
-            });
+            w->sizeAnimation()->setCallbackOnEnd(nullptr);
         });
     } else if (mode == "slide") {
-        g_pEventLoopManager->doLater([w = PHLWINDOWREF{window}, PIN, POUT, HEIGHT = configValues.slideHeight->value()] {
+        const auto ORIGINAL = window->positionAnimation()->goal();
+
+        window->positionAnimation()->setConfig(PIN);
+
+        *window->positionAnimation() = ORIGINAL - Vector2D{0.F, configValues.slideHeight->value()};
+
+        window->positionAnimation()->setCallbackOnEnd([w = PHLWINDOWREF{window}, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
             if (!w)
                 return;
+            w->positionAnimation()->setConfig(POUT);
 
-            const auto ORIGINAL = w->positionAnimation()->goal();
+            if (w->m_isFloating || Fullscreen::controller()->isFullscreen(w.lock()))
+                *w->positionAnimation() = ORIGINAL;
+            else
+                w->layoutTarget()->recalc();
 
-            w->positionAnimation()->setConfig(PIN);
-
-            *w->positionAnimation() = ORIGINAL - Vector2D{0.F, HEIGHT};
-
-            w->positionAnimation()->setCallbackOnEnd([w, POUT, ORIGINAL](WP<CBaseAnimatedVariable> pav) {
-                if (!w)
-                    return;
-                w->positionAnimation()->setConfig(POUT);
-
-                if (w->isFloating() || Fullscreen::controller()->isFullscreen(w.lock()))
-                    *w->positionAnimation() = ORIGINAL;
-                else
-                    w->layoutTarget()->recalc();
-
-                w->positionAnimation()->setCallbackOnEnd(nullptr);
-            });
+            w->positionAnimation()->setCallbackOnEnd(nullptr);
         });
     }
 }
@@ -200,6 +190,6 @@ APICALL EXPORT void PLUGIN_EXIT() {
 
         w->sizeAnimation()->setCallbackOnEnd(nullptr);
         w->positionAnimation()->setCallbackOnEnd(nullptr);
-        w->alpha()[Desktop::View::WINDOW_ALPHA_ACTIVE]->setCallbackOnEnd(nullptr);
+        w->alpha(Desktop::View::WINDOW_ALPHA_ACTIVE)->setCallbackOnEnd(nullptr);
     }
 }
